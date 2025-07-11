@@ -69,7 +69,7 @@ graph TD
     H --> J[Save to File]
 ```
 
-## Implementation Details
+## Implementation
 
 ## Core Components
 
