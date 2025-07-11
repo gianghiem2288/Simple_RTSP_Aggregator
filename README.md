@@ -71,15 +71,11 @@ graph TD
 
 ## Implementation Details
 
-### Core Components
+## Core Components
 
-#### 1. RTSP Server Initialization
+### 1. RTSP Server Initialization (`__init__` method)
+
 ```python
-import cv2
-import threading
-import concurrent.futures
-from queue import Queue
-
 class RTSPServer:
     def __init__(self, host='0.0.0.0', port=8554, 
                  max_clients=5, display_streams=True, 
@@ -98,120 +94,256 @@ class RTSPServer:
         self.running = False
 ```
 
-#### 2. Stream Processing Function
+**Explanation:**
+1. **Network Configuration**:
+   - `host='0.0.0.0'`: Binds to all available network interfaces
+   - `port=8554`: Default RTSP port (IANA assigned)
+
+2. **Capacity Management**:
+   - `max_clients=5`: Maximum simultaneous streams
+   - `stream_queues={}`: Dictionary to store client-specific data queues
+   - `client_counter=0`: Auto-incrementing ID for each client
+
+3. **Stream Handling Options**:
+   - `display_streams=True`: Enable real-time video display
+   - `save_path=None`: Optional path for saving video recordings
+
+4. **Concurrency Infrastructure**:
+   - `ThreadPoolExecutor`: Manages worker threads (1 per client)
+   - `max_workers=max_clients`: Matches thread pool size to client limit
+   - `lock=threading.Lock()`: Ensures thread-safe operations
+
+5. **State Control**:
+   - `running=False`: Server state flag (starts as inactive)
+
+### 2. Stream Processing Function (`process_stream` method)
+
 ```python
-    def process_stream(self, client_id, stream_url):
-        """Capture, process and manage an RTSP stream"""
-        cap = cv2.VideoCapture(stream_url)
-        if not cap.isOpened():
-            print(f"Error opening stream: {stream_url}")
-            return
-        
-        # Initialize video writer if saving
-        writer = None
-        if self.save_path:
-            frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            filename = f"{self.save_path}/client_{client_id}.mp4"
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(filename, fourcc, fps, 
-                                    (frame_width, frame_height))
-        
-        print(f"Processing stream for client {client_id}: {stream_url}")
-        
-        while self.running:
-            ret, frame = cap.read()
-            if not ret:
-                print(f"Stream ended for client {client_id}")
-                break
-                
-            # Process frame
-            processed_frame = self.process_frame(frame, client_id)
-            
-            # Save frame if required
-            if writer:
-                writer.write(processed_frame)
-            
-            # Display frame if required
-            if self.display_streams:
-                cv2.imshow(f"Client {client_id}", processed_frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-        
-        # Cleanup
-        cap.release()
-        if writer:
-            writer.release()
-        if self.display_streams:
-            cv2.destroyWindow(f"Client {client_id}")
-        
-        with self.lock:
-            del self.stream_queues[client_id]
-            print(f"Client {client_id} disconnected")
+def process_stream(self, client_id, stream_url):
+    cap = cv2.VideoCapture(stream_url)
+    # ... [initialization and setup] ...
+    while self.running:
+        ret, frame = cap.read()
+        # ... [frame processing] ...
+        processed_frame = self.process_frame(frame, client_id)
+        # ... [output handling] ...
+    # ... [cleanup] ...
 ```
 
-#### 3. Frame Processing (Placeholder for Custom Logic)
+**Processing Pipeline:**
+1. **Stream Initialization**:
+   - `cv2.VideoCapture()`: Opens RTSP stream using OpenCV's backend
+   - Checks `cap.isOpened()` to verify connection success
+
+2. **Recording Setup**:
+   - Retrieves stream metadata (resolution, FPS)
+   - Initializes `VideoWriter` with MP4V codec if saving enabled
+   - Generates unique filename per client
+
+3. **Frame Processing Loop**:
+   - `cap.read()`: Fetches next video frame
+   - `ret` checks for successful frame capture
+   - Loop continues while `self.running` is True
+
+4. **Output Handling**:
+   - Writes frame to video file if recording enabled
+   - Displays frame in dedicated window if enabled
+   - `cv2.waitKey(1)`: Handles keyboard interrupts (q to quit)
+
+5. **Resource Cleanup**:
+   - Releases capture device and writer resources
+   - Destroys client-specific display window
+   - Removes client from tracking dictionary
+
+### 3. Frame Processing (`process_frame` method)
+
 ```python
-    def process_frame(self, frame, client_id):
-        """Apply processing to video frames"""
-        # Example: Add client ID watermark
-        cv2.putText(frame, f"Client #{client_id}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        return frame
+def process_frame(self, frame, client_id):
+    cv2.putText(frame, f"Client #{client_id}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+    return frame
 ```
 
-#### 4. Client Connection Handler
+**Key Features:**
+1. **Modification Point**:
+   - Primary extension point for custom video processing
+   - Receives raw frame and returns modified version
+
+2. **Example Watermarking**:
+   - Adds client ID text overlay
+   - Position: Top-left corner (10px from left, 30px from top)
+   - Green color (0,255,0) with thickness 2
+
+3. **Performance Considerations**:
+   - Called for every frame - keep efficient
+   - Ideal for lightweight operations (watermarking, basic filters)
+   - For heavy processing (AI), consider separate processing queue
+
+### 4. Client Connection Handler (`handle_client` method)
+
 ```python
-    def handle_client(self, stream_url):
-        """Handle a new client connection"""
-        with self.lock:
-            self.client_counter += 1
-            client_id = self.client_counter
-            self.stream_queues[client_id] = Queue()
-        
-        print(f"New client connected: ID={client_id}, URL={stream_url}")
-        self.process_stream(client_id, stream_url)
+def handle_client(self, stream_url):
+    with self.lock:
+        self.client_counter += 1
+        client_id = self.client_counter
+        self.stream_queues[client_id] = Queue()
+    self.process_stream(client_id, stream_url)
 ```
 
-#### 5. Server Startup and Main Loop
+**Connection Workflow:**
+1. **Thread-Safe Initialization**:
+   - `with self.lock:` ensures atomic operations
+   - Prevents race conditions with concurrent connections
+
+2. **Client Registration**:
+   - Increments global client counter
+   - Assigns unique client ID
+   - Creates dedicated Queue for frame transfer (future use)
+
+3. **Stream Processing Start**:
+   - Directly invokes `process_stream()`
+   - Passes client ID and RTSP stream URL
+   - Runs in executor-managed thread
+
+### 5. Server Startup and Main Loop (`start` method)
+
 ```python
-    def start(self):
-        """Start the RTSP server"""
-        self.running = True
-        print(f"RTSP Server started at rtsp://{self.host}:{self.port}")
-        print(f"Maximum clients: {self.max_clients}")
-        
-        # Simulated client connection loop
-        while self.running:
-            # In a real implementation, this would accept network connections
-            # For demo purposes, we're simulating client connections
-            if len(self.stream_queues) < self.max_clients:
-                # This would normally come from network connection
-                stream_url = input("Enter client stream URL (or 'exit' to stop): ")
-                
-                if stream_url.lower() == 'exit':
-                    self.running = False
-                    break
-                
-                if stream_url:
-                    self.executor.submit(
-                        self.handle_client, 
-                        stream_url
-                    )
-            else:
-                print("Server at maximum capacity. Rejecting new connections.")
-                threading.Event().wait(5)
-        
-        self.shutdown()
+def start(self):
+    self.running = True
+    # ... [server info print] ...
+    while self.running:
+        if len(self.stream_queues) < self.max_clients:
+            stream_url = input("Enter client stream URL...")
+            # ... [input handling] ...
+            self.executor.submit(self.handle_client, stream_url)
+        else:
+            # ... [wait logic] ...
+    self.shutdown()
+```
+
+**Control Flow:**
+1. **Server Activation**:
+   - Sets `running=True` to enable processing loops
+   - Prints startup message with connection details
+
+2. **Connection Management Loop**:
+   - Checks current client count vs capacity
+   - Accepts new connections when under limit
+   - Uses blocking input for demo (replace with socket accept)
+
+3. **Client Handling**:
+   - `executor.submit()`: Assigns client to thread pool
+   - Passes stream URL to handler function
+   - Automatic thread management by executor
+
+4. **Capacity Management**:
+   - When at maximum clients:
+     - Prints capacity message
+     - Waits 5 seconds before rechecking
+     - Prevents resource exhaustion
+
+5. **Graceful Shutdown**:
+   - Triggers on "exit" command
+   - Sets `running=False` to stop all loops
+   - Invokes cleanup procedure
+
+### 6. Resource Cleanup (`shutdown` method)
+
+```python
+def shutdown(self):
+    self.executor.shutdown(wait=True)
+    if self.display_streams:
+        cv2.destroyAllWindows()
+    print("Server shutdown complete")
+```
+
+**Termination Sequence:**
+1. **Thread Management**:
+   - `executor.shutdown(wait=True)`: 
+     - Stops accepting new tasks
+     - Waits for active streams to finish
+     - Preserves processing integrity
+
+2. **UI Cleanup**:
+   - `cv2.destroyAllWindows()`: Closes all OpenCV windows
+   - Only executes if display was enabled
+
+3. **State Verification**:
+   - Final confirmation message
+   - Ensures all resources released properly
+
+## Concurrency Model Explained
+
+```mermaid
+sequenceDiagram
+    participant MainThread
+    participant Executor
+    participant WorkerThread
+    participant OpenCV
     
-    def shutdown(self):
-        """Cleanup server resources"""
-        self.executor.shutdown(wait=True)
-        if self.display_streams:
-            cv2.destroyAllWindows()
-        print("Server shutdown complete")
+    MainThread->>Executor: submit(handle_client)
+    Executor->>WorkerThread: assign_client()
+    WorkerThread->>OpenCV: VideoCapture(rtsp_url)
+    loop Frame Processing
+        WorkerThread->>OpenCV: read()
+        OpenCV-->>WorkerThread: frame
+        WorkerThread->>WorkerThread: process_frame()
+        alt Display Enabled
+            WorkerThread->>OpenCV: imshow()
+        end
+        alt Recording Enabled
+            WorkerThread->>OpenCV: write()
+        end
+    end
+    WorkerThread->>OpenCV: release()
 ```
+
+**Key Architecture Features:**
+1. **Main Thread**:
+   - Manages connection acceptance
+   - Coordinates thread pool
+   - Handles user input
+
+2. **Thread Pool**:
+   - Fixed-size worker pool (max_clients)
+   - Automatic thread reuse
+   - Built-in task queue
+
+3. **Worker Threads**:
+   - 1:1 mapping with clients
+   - Full lifecycle management
+   - Isolated processing environments
+
+4. **Resource Isolation**:
+   - Each thread has independent:
+     - VideoCapture instance
+     - VideoWriter instance
+     - Display window
+     - Processing state
+
+## Critical Design Considerations
+
+1. **Thread Safety**:
+   - Shared resources protected with `Lock()`
+   - Atomic operations for client registration
+   - Thread-local storage for stream objects
+
+2. **Resource Constraints**:
+   - Fixed thread pool prevents overload
+   - Explicit resource release in cleanup
+   - Frame skipping prevention via blocking read
+
+3. **Error Handling**:
+   - Connection failures caught immediately
+   - Per-client isolation prevents cascading failures
+   - Graceful degradation when at capacity
+
+4. **Extensibility Points**:
+   - Frame processing via `process_frame()` override
+   - Output handling through display/save flags
+   - Queue infrastructure for advanced pipelines
+
+This architecture provides a balance between concurrency needs and resource management, ensuring stable operation while maintaining flexibility for different streaming scenarios.
 
 ### Full Implementation Code
 ```python
