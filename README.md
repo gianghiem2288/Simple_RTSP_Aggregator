@@ -1,4 +1,4 @@
-# RTSP Server for Video Streaming with Python
+# RTSP Aggregator for Video Streaming with Python
 ---
 
 # RTSP Video Streaming Server
@@ -101,7 +101,7 @@ graph TD
 
 ## Core Components
 
-### 1. RTSP Server Initialization (`__init__` method)
+### 1. RTSP Aggregator Initialization (`__init__` method)
 
 ```python
 class RTSPServer:
