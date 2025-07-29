@@ -1,12 +1,12 @@
 # RTSP Aggregator for Video Streaming with Python
 ---
 
-# RTSP Video Streaming Server
+# RTSP Video Streaming Aggregator
 
 ## Overview
 Real-Time Streaming Protocol (RTSP) is a network control protocol designed for controlling media servers in entertainment and communications systems. Unlike HTTP, which is designed for document transfer, RTSP provides efficient transport for time-based multimedia content with low-latency requirements. Compared to WebRTC (which is peer-to-peer focused), RTSP uses a client-server model ideal for centralized media distribution.
 
-This project implements a Python-based RTSP server that:
+This project implements a Python-based RTSP aggregator that:
 - Accepts incoming video streams from multiple clients
 - Manages concurrent streams using threading
 - Displays streams locally or saves to files
